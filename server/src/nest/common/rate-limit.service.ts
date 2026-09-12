@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { readEnv } from '../../app-config';
 
 interface Attempt { count: number; first: number }
 
@@ -29,10 +30,17 @@ export class RateLimitService {
 
   /** Returns true when the request is allowed, false when it should be rejected (429). */
   check(bucket: string, key: string, max: number, windowMs: number, now: number): boolean {
+    // RATE_LIMIT_MAX_OVERRIDE is a development escape hatch rather than a tuning
+    // knob: a local instance keys every bucket on one address, so the operator
+    // and their scripts share a single attempt budget and trip here on limits
+    // meant for strangers. Read per call, because readEnv() is documented as
+    // never caching across requests and the tests mutate process.env at runtime.
+    const { maxOverride } = readEnv().rateLimit;
+    const ceiling = maxOverride > 0 && max < maxOverride ? maxOverride : max;
     const store = this.store(bucket);
     this.sweep(bucket, store, windowMs, now);
     const record = store.get(key);
-    if (record && record.count >= max && now - record.first < windowMs) {
+    if (record && record.count >= ceiling && now - record.first < windowMs) {
       return false;
     }
     if (!record || now - record.first >= windowMs) {

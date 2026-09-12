@@ -186,6 +186,23 @@ export function deriveSmtp(raw: RawEnv) {
   };
 }
 
+/**
+ * Dev escape hatch for the shared in-memory HTTP limiter.
+ *
+ * Every bucket is keyed on the client IP, and a local instance collapses the
+ * browser, the CLI and any test script onto 127.0.0.1 — one shared attempt
+ * budget that is easy to trip while testing, punishing the operator for being
+ * the only client. Setting the override raises every bucket ceiling; it is
+ * unset in any real deployment, where those ceilings are the brute-force
+ * protection on the auth routes.
+ */
+export function deriveRateLimit(raw: RawEnv) {
+  return {
+    // 0 is never a usable ceiling, so it reads as "no override".
+    maxOverride: positiveIntOr(raw.RATE_LIMIT_MAX_OVERRIDE, 0),
+  };
+}
+
 export function deriveMcp(raw: RawEnv) {
   return {
     sessionTtlMs: resolveSessionTtlMs(raw.MCP_SESSION_TTL),
@@ -304,6 +321,7 @@ export function deriveAll(raw: RawEnv) {
     adminBootstrap: deriveAdminBootstrap(raw),
     oidc: deriveOidc(raw),
     smtp: deriveSmtp(raw),
+    rateLimit: deriveRateLimit(raw),
     mcp: deriveMcp(raw),
     plugins: derivePlugins(raw),
     webauthn: deriveWebauthn(raw),

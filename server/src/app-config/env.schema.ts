@@ -99,6 +99,10 @@ export const envSchema = z.object({
   WEBAUTHN_RP_ID: anyString,
   WEBAUTHN_ORIGINS: anyString,
 
+  // Rate limiting
+  // Raises every in-memory limiter bucket ceiling (see RateLimitService.check).
+  RATE_LIMIT_MAX_OVERRIDE: positiveNumber,
+
   // MCP
   MCP_SESSION_TTL: positiveNumber,
   MCP_MAX_SESSION_PER_USER: positiveNumber,

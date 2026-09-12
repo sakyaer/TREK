@@ -12,6 +12,7 @@ export {
   deriveAdminBootstrap,
   deriveOidc,
   deriveSmtp,
+  deriveRateLimit,
   deriveMcp,
   derivePlugins,
   deriveWebauthn,
