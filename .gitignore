@@ -36,6 +36,7 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+.workbuddy/
 
 # Logs
 logs
