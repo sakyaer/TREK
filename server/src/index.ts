@@ -4,6 +4,7 @@ import 'dotenv/config';
 // variable aborts before any other module runs its import-time side effects
 // (config.ts key resolution, db/database.ts initDb, ...).
 import './app-config/boot-validate';
+import './app-config/outbound-proxy';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
