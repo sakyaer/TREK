@@ -18,11 +18,55 @@ in the planner, but a plain `POST` here.
 - ✅ = executed against a live instance while writing this skill, with the real status code and response body recorded.
 - 📖 = read from source, not executed. Cite the file before trusting it.
 
+## 0. Which instance are you operating on?
+
+**Settle this before the first call.** TREK is self-hosted, so more than one store can
+be reachable at once and both look like "the" TREK. Picking wrong fails *silently*: the
+call returns 200, the write lands somewhere, and nothing tells you it went to the host
+you did not mean.
+
+| Role | Base URL | Defined by |
+|---|---|---|
+| **Live instance** — what the MCP tools and the user's UI actually share | `https://trek.sakyaer.vip` | the `trek` entry in `~/.zcode/cli/config.json` |
+| Local dev instance | `http://localhost:9999` | `scripts/run-local.sh [PORT]`, default `9999` |
+
+The binding is a config value, not a fact about this repo — **confirm it instead of
+reciting the table**, because it has already been switched once (local → remote, kept
+as a timestamped `~/.zcode/cli/config.json.bak-*`):
+
+```bash
+grep -o 'https\?://[^"]*' ~/.zcode/cli/config.json | grep -i trek
+```
+
+**No file in this working tree describes the live data.** `server/data/travel.db` and
+`server/uploads/` belong to the *local dev* instance. Reading them tells you what the
+local instance holds; that is never a proxy for what the live instance holds, however
+familiar the repo looks — and even when the two contain matching content.
+
+✅ Verified the hard way. `delete_budget_item` (trip 8, items 7 and 8) returned
+`{"success":true}` for the live instance while `server/data/travel.db` still listed
+both rows and the same 25-item total. The MCP session was bound to
+`trek.sakyaer.vip`; the file was the untouched dev copy. Re-issuing the identical
+delete then returned `Budget item not found.` — that is what proves the first call
+landed on a real store. The two stores held matching trip data (trip 8, 77 places,
+14 days, identical `created_at`), so a look-alike copy is the *normal* case here, not
+a warning sign.
+
+Corollaries:
+
+- **A write that "did not take" is usually a write that took elsewhere.** When a change
+  is missing, check the binding before suspecting the row, the permission, or a cache.
+- **Destructive calls need the target confirmed, not assumed.** Deleting from the wrong
+  instance leaves you believing the work is done.
+- **A restore re-publishes whatever the backup holds.** Restoring a local-made backup
+  onto the live instance brings back rows that were deleted live — including private
+  or scratch ones. Check a backup's contents before uploading it.
+
 ## 1. Access and authentication
 
-Base URL comes from the repo's own `scripts/run-local.sh` (first argument, default
-`9999`) or the deployment host. **Routes have no global prefix** — every path below is
-literal and served as-is (`server/src/bootstrap.ts` sets no global prefix).
+Base URL is `$TREK_URL` — the instance you confirmed in §0, not an assumed one.
+**Routes have no global prefix** — every path below is literal and served as-is
+(`server/src/bootstrap.ts` sets no global prefix).
 
 ### Path A — REST, a session JWT (use this for anything the UI can do)
 
@@ -343,7 +387,22 @@ Worse, several unrelated routes share a bucket literally named `login` with
 | `POST /api/auth/forgot-password` | `forgot` | 3 |
 | `POST /api/auth/reset-password` | `reset` | 5 |
 
-So minting an MCP token spends your *login* budget at a *lower* ceiling, and the only
+The OAuth endpoints are separate, and on a **60 s** window rather than 15 min
+(`oauth-public.controller.ts:40,158`, `oauth-api.controller.ts:37`):
+
+| Route | Bucket | Key | Ceiling |
+|---|---|---|---|
+| `POST /oauth/token` | `oauth_token` | `${req.ip}\|${client_id}` | **30 / 60 s** |
+| `POST /oauth/revoke` | `oauth_revoke` | `req.ip` | 10 / 60 s |
+| `GET /oauth/authorize/validate` | `oauth_validate` | `req.ip` | 30 / 60 s |
+
+⚠️ `oauth_token` is keyed by **IP *and* `client_id`**, so it is not the `login` bucket
+and minting a token does not spend login budget. What actually starves is a script that
+re-mints per tool call: 30 successful mints in one minute, then a wall of 429s that
+clears on its own a minute later. Cache the token instead.
+
+So minting a **static** MCP token (`/api/auth/mcp-tokens`) spends your *login* budget at a
+*lower* ceiling — that route, not `/oauth/token`. The only
 feedback is a bare `429 {"error":"Too many attempts. Please try again later."}`. A
 rejected request does not increment the counter, so polling is safe; the window resets
 15 minutes after the **first** attempt in it.
@@ -383,6 +442,11 @@ enrichment, OAuth. Don't raise those to unblock a test — they are not what blo
 `scripts/trek-api.sh` is a thin authenticated `curl` wrapper that removes the login
 and header boilerplate. Both its paths are ✅ verified end-to-end against a live
 instance.
+
+**It defaults to `TREK_URL=http://localhost:9999` — the local dev instance.** Set
+`TREK_URL` to the instance you confirmed in §0 before using it, or you get the worst
+split available: the MCP tools writing to the live instance while this script reads and
+writes the local one, with both reporting success.
 
 ```bash
 export TREK_EMAIL=you@example.com TREK_PASSWORD=…      # or TREK_JWT=<jwt>

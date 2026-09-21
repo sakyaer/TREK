@@ -38,6 +38,10 @@ Thumbs.db
 .claude/
 .workbuddy/
 
+# ZCode workspace config — holds an MCP client secret, never commit
+.zcode/config.json
+zcode.json
+
 # Logs
 logs
 *.log

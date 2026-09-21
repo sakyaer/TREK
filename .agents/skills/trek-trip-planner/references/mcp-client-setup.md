@@ -4,6 +4,18 @@ Getting an MCP client to authenticate against TREK is where most of the time goe
 This is the verified field guide — every command below was executed, and the failure
 table is drawn from failures actually hit, not imagined ones.
 
+**The URL in every example below is a placeholder, not a target.** `localhost:9999` is
+the local dev instance; the live one is a different host, and which of them your client
+is bound to decides which store your writes reach — settle that first, per §0 of the
+skill, because getting it wrong is silent. Two consequences that follow from the host
+choice:
+
+- A remote instance must be reached over **`https`** — `mcp-remote` refuses to send a
+  client secret to a non-HTTPS token endpoint, with `localhost` / `127.0.0.1` the only
+  exemptions (§7). That is why the live binding is an `https://…` origin.
+- `--callback-path /` and the redirect-path traps below are `localhost`-specific; they
+  do not carry over to a remote host.
+
 ## 1. Pick the auth method for the client you have
 
 | Client capability | Method | Works with `mcp-remote`? |
@@ -199,6 +211,7 @@ pairs the `http://localhost` presets with `mcp-remote`, without mentioning
 | `spawn npx ENOENT` | The client's `PATH` lacks npx (a GUI app often gets a minimal `PATH`). Use an absolute path such as `/opt/homebrew/bin/npx`. |
 | `Refusing to send the client secret … needs an https token endpoint` | Always `https`, except `localhost` / `127.0.0.1`, which are exempt. |
 | Worked, then died an hour later | A static bearer token was pasted into `headers`; machine-client tokens last 3600s. Let the client renew them. |
+| `429 Too Many Requests` on `/oauth/token` mid-run | You re-mint per request. `/oauth/token` has **its own bucket** — `oauth_token`, **30 per 60 s**, keyed `${req.ip}\|${client_id}` (`oauth-public.controller.ts:40`), not the `login` bucket. Mint once, cache the `trekoa_…` for its `expires_in` (3600s), reuse it for every tool call. |
 
 ## 8. Verify before blaming the client
 
